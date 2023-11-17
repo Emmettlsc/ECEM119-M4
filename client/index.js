@@ -14,21 +14,11 @@ function updatePaddlePosition(position) {
     // You'll need to map the gyroscope data to a suitable position value for the paddle
     // paddle_1.style.top = position + paddle_1_coord.top + 'px';
 
-    if (position > 0) {
-        paddle_1.style.top =
-            Math.max(
-                board_coord.top,
-                paddle_1_coord.top - position * 200
-            ) + 'px';
-    } else {
-        paddle_1.style.top =
-            Math.max(
-                board_coord.top,
-                paddle_1_coord.top + position * 200
-            ) + 'px';
-    }
-
-
+    paddle_1.style.top =
+        Math.max(
+            board_coord.top,
+            paddle_1_coord.top - position * 50
+        ) + 'px';
 
     paddle_1_coord = paddle_1.getBoundingClientRect();
 }

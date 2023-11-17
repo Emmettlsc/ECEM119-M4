@@ -66,45 +66,28 @@ func handleMessages() {
 	for {
 		msg := <-broadcast
 		fmt.Printf("Broadcasting message: %s\n", string(msg))
-
 		mu.Lock()
 		for cl := range clients {
-			// Use a local variable to avoid blocking while holding the mutex
-			sendChan := cl.send
-			mu.Unlock()
-
 			select {
-			case sendChan <- msg:
+			case cl.send <- msg:
 			default:
 				close(cl.send)
-				mu.Lock()
 				delete(clients, cl)
-				mu.Unlock()
 			}
-
-			mu.Lock()
 		}
 		mu.Unlock()
 	}
 }
 
 func writePump(cl *client) {
-	defer func() {
-		cl.conn.Close()
-		close(cl.send) // Ensure the send channel is closed
-	}()
-
+	defer cl.conn.Close()
 	for {
 		msg, ok := <-cl.send
 		if !ok {
-			// The send channel is closed
 			cl.conn.WriteMessage(websocket.CloseMessage, []byte{})
 			return
 		}
-		if err := cl.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			log.Println("write:", err)
-			return
-		}
+		cl.conn.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
