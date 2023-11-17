@@ -11,11 +11,7 @@ import (
 
 var addr = flag.String("addr", "0.0.0.0:8080", "http service address")
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins
-	},
-}
+var upgrader = websocket.Upgrader{} // use default options
 
 // client represents a connected WebSocket client.
 type client struct {
@@ -30,6 +26,11 @@ var (
 )
 
 func echo(w http.ResponseWriter, r *http.Request) {
+	var upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins
+		},
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -46,11 +47,11 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	go writePump(cl) // Start the writePump goroutine for this client
 
 	for {
-		_, message, _ := conn.ReadMessage()
-		//if err != nil {
-		//	log.Println("read:", err)
-		//	break
-		//}
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
 		log.Printf("recv: %s", message)
 
 		// Broadcast the message to all clients
