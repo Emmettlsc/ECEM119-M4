@@ -11,7 +11,11 @@ import (
 
 var addr = flag.String("addr", "0.0.0.0:8080", "http service address")
 
-var upgrader = websocket.Upgrader{} // use default options
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins
+	},
+}
 
 // client represents a connected WebSocket client.
 type client struct {
@@ -26,11 +30,6 @@ var (
 )
 
 func echo(w http.ResponseWriter, r *http.Request) {
-	var upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow all origins
-		},
-	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Print("upgrade:", err)
@@ -67,28 +66,45 @@ func handleMessages() {
 	for {
 		msg := <-broadcast
 		fmt.Printf("Broadcasting message: %s\n", string(msg))
+
 		mu.Lock()
 		for cl := range clients {
+			// Use a local variable to avoid blocking while holding the mutex
+			sendChan := cl.send
+			mu.Unlock()
+
 			select {
-			case cl.send <- msg:
+			case sendChan <- msg:
 			default:
 				close(cl.send)
+				mu.Lock()
 				delete(clients, cl)
+				mu.Unlock()
 			}
+
+			mu.Lock()
 		}
 		mu.Unlock()
 	}
 }
 
 func writePump(cl *client) {
-	defer cl.conn.Close()
+	defer func() {
+		cl.conn.Close()
+		close(cl.send) // Ensure the send channel is closed
+	}()
+
 	for {
 		msg, ok := <-cl.send
 		if !ok {
+			// The send channel is closed
 			cl.conn.WriteMessage(websocket.CloseMessage, []byte{})
 			return
 		}
-		cl.conn.WriteMessage(websocket.TextMessage, msg)
+		if err := cl.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			log.Println("write:", err)
+			return
+		}
 	}
 }
 
