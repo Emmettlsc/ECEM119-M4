@@ -46,11 +46,11 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	go writePump(cl) // Start the writePump goroutine for this client
 
 	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			break
-		}
+		_, message, _ := conn.ReadMessage()
+		//if err != nil {
+		//	log.Println("read:", err)
+		//	break
+		//}
 		log.Printf("recv: %s", message)
 
 		// Broadcast the message to all clients
