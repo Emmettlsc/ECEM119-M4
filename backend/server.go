@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -37,42 +36,39 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	cl := &client{conn: conn, send: make(chan []byte)}
-
+	cl := &client{conn: conn, send: make(chan []byte, 256)} // Buffering the send channel
 	mu.Lock()
 	clients[cl] = true
 	mu.Unlock()
 
-	go writePump(cl) // Start the writePump goroutine for this client
+	go writePump(cl)
 
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
 			break
 		}
-		log.Printf("recv: %s", message)
-
-		// Broadcast the message to all clients
 		broadcast <- message
 	}
 
 	mu.Lock()
 	delete(clients, cl)
+	close(cl.send) // Close the send channel when the client disconnects
 	mu.Unlock()
 }
 
 func handleMessages() {
 	for {
 		msg := <-broadcast
-		fmt.Printf("Broadcasting message: %s\n", string(msg))
 		mu.Lock()
 		for cl := range clients {
 			select {
 			case cl.send <- msg:
 			default:
-				close(cl.send)
-				delete(clients, cl)
+				// Avoid closing the channel here; handle it in writePump
 			}
 		}
 		mu.Unlock()
@@ -85,9 +81,12 @@ func writePump(cl *client) {
 		msg, ok := <-cl.send
 		if !ok {
 			cl.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			return // Exit the goroutine when send channel is closed
+		}
+		if err := cl.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			log.Println("write error:", err)
 			return
 		}
-		cl.conn.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
